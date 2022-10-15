@@ -11,7 +11,10 @@ export interface RefactorDefinition {
   ) => T.Effect<
     typeof ts | ts.LanguageService,
     E,
-    O.Maybe<T.Effect<typeof ts | ts.LanguageService | ts.textChanges.ChangeTracker, E, void>>
+    O.Maybe<{
+      description: string
+      apply: T.Effect<typeof ts | ts.LanguageService | ts.textChanges.ChangeTracker, E, void>
+    }>
   >
 }
 

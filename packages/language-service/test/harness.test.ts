@@ -126,7 +126,7 @@ export function testRefactorOnExample(refactor: RefactorDefinition, fileName: st
       preferences: {}
     },
     (changeTracker) =>
-      canApply.value
+      canApply.value.apply
         .provideService(AST.ChangeTrackerApi, changeTracker)
         .provideService(AST.TypeScriptApi, ts)
         .provideService(AST.LanguageServiceApi, languageService)

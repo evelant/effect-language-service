@@ -13,8 +13,9 @@ export default createRefactor({
 
       return nodes.filter(ts.isFunctionDeclaration).filter(node => !!node.body).filter(node =>
         !!(ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Async)
-      ).head.map(node =>
-        Do($ => {
+      ).head.map(node => ({
+        description: "Convert to Effect.gen",
+        apply: Do($ => {
           const changeTracker = $(T.service(AST.ChangeTrackerApi))
 
           let currentFlags = ts.getCombinedModifierFlags(node)
@@ -35,6 +36,6 @@ export default createRefactor({
 
           changeTracker.replaceNode(sourceFile, node, newDeclaration)
         })
-      )
+      }))
     })
 })

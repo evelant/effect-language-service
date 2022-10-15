@@ -5,7 +5,7 @@ import { asPipeArguments, isPipeableCallExpression } from "@effect/language-serv
 
 export default createRefactor({
   name: "effect/addPipe",
-  description: "Rewrite using pipe()",
+  description: "Rewrite using pipe",
   apply: (sourceFile, textRange) =>
     Do($ => {
       const ts = $(T.service(AST.TypeScriptApi))
@@ -13,8 +13,14 @@ export default createRefactor({
       const nodes = $(AST.getNodesContainingRange(sourceFile, textRange))
       const pipeableCallExpressions = $(Effect.filterPar(nodes.reverse, isPipeableCallExpression))
 
-      return pipeableCallExpressions.filter(ts.isCallExpression).head.map(node =>
-        Do($ => {
+      function getHumanReadableName(node: ts.Node) {
+        const text = node.getText(sourceFile)
+        return text.length > 10 ? text.substring(0, 10) + "..." : text
+      }
+
+      return pipeableCallExpressions.filter(ts.isCallExpression).head.map(node => ({
+        description: `Rewrite ${getHumanReadableName(node.expression)} to pipe`,
+        apply: Do($ => {
           const changeTracker = $(T.service(AST.ChangeTrackerApi))
           const args = $(asPipeArguments(node))
 
@@ -26,6 +32,6 @@ export default createRefactor({
 
           changeTracker.replaceNode(sourceFile, node, newNode)
         })
-      )
+      }))
     })
 })

@@ -32,7 +32,7 @@ export default function init(modules: { typescript: typeof import("typescript/li
                 description: refactor.description,
                 actions: [{
                   name: refactor.name,
-                  description: refactor.description
+                  description: _.description
                 }]
               }))
             )
@@ -82,7 +82,7 @@ export default function init(modules: { typescript: typeof import("typescript/li
                 preferences: preferences || {}
               },
               changeTracker =>
-                possibleRefactor.value.provideService(AST.ChangeTrackerApi, changeTracker).provideService(
+                possibleRefactor.value.apply.provideService(AST.ChangeTrackerApi, changeTracker).provideService(
                   AST.TypeScriptApi,
                   modules.typescript
                 )
