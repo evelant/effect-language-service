@@ -1,5 +1,8 @@
 import * as T from "@effect/core/io/Effect"
 import * as AST from "@effect/language-service/ast"
+import type { DiagnosticDefinition } from "@effect/language-service/diagnostics/definition"
+import diagnostics from "@effect/language-service/diagnostics/index"
+import type { RefactorDefinition } from "@effect/language-service/refactors/definition"
 import refactors from "@effect/language-service/refactors/index"
 import { identity } from "@tsplus/stdlib/data/Function"
 import * as O from "@tsplus/stdlib/data/Maybe"
@@ -18,6 +21,33 @@ export default function init(modules: { typescript: typeof import("typescript/li
       proxy[k] = (...args: Array<{}>) => languageService[k]!.apply(languageService, args)
     }
 
+    proxy.getSuggestionDiagnostics = (...args) => {
+      const suggestionDiagnostics = languageService.getSuggestionDiagnostics(...args)
+      const [fileName] = args
+
+      const effectDiagnostics = AST.getSourceFile(fileName).flatMap(sourceFile =>
+        T.forEachPar(
+          Object.values<DiagnosticDefinition>(diagnostics),
+          diagnostic =>
+            diagnostic.apply(sourceFile).map(results =>
+              results.map(_ => ({
+                file: sourceFile,
+                start: _.node.pos,
+                length: _.node.end - _.node.pos,
+                messageText: _.messageText,
+                category: _.category,
+                code: diagnostic.code
+              }))
+            )
+        )
+      ).map(v => v.flatten).map(v => Array.from(v))
+        .provideService(AST.LanguageServiceApi, info.languageService)
+        .provideService(AST.TypeScriptApi, modules.typescript)
+        .unsafeRunSync()
+
+      return suggestionDiagnostics.concat(effectDiagnostics)
+    }
+
     proxy.getApplicableRefactors = (...args) => {
       const applicableRefactors = languageService.getApplicableRefactors(...args)
       const [fileName, positionOrRange] = args
@@ -25,7 +55,7 @@ export default function init(modules: { typescript: typeof import("typescript/li
 
       const effectRefactors = AST.getSourceFile(fileName).flatMap(sourceFile =>
         T.collectAllWith(
-          Object.values(refactors).map(refactor =>
+          Object.values<RefactorDefinition>(refactors).map(refactor =>
             refactor.apply(sourceFile, textRange).map(canApply =>
               canApply.map(_ => ({
                 name: refactor.name,

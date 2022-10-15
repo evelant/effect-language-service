@@ -1,7 +1,7 @@
 import * as T from "@effect/core/io/Effect"
 import * as AST from "@effect/language-service/ast"
 import { createRefactor } from "@effect/language-service/refactors/definition"
-import { isPipeCall } from "@effect/language-service/refactors/utils"
+import { isPipeCall } from "@effect/language-service/utils"
 
 export default createRefactor({
   name: "effect/removePipe",

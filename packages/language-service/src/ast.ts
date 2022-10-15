@@ -1,5 +1,3 @@
-import * as T from "@effect/core/io/Effect"
-import * as CH from "@tsplus/stdlib/collections/Chunk"
 import { Tag } from "@tsplus/stdlib/service/Tag"
 import type ts from "typescript/lib/tsserverlibrary"
 
@@ -32,7 +30,8 @@ declare module "typescript/lib/tsserverlibrary" {
 }
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-export const TypeScriptApi = Tag<typeof import("typescript/lib/tsserverlibrary")>()
+export type TypeScriptApi = typeof import("typescript/lib/tsserverlibrary")
+export const TypeScriptApi = Tag<TypeScriptApi>()
 export const LanguageServiceApi = Tag<ts.LanguageService>()
 export const ChangeTrackerApi = Tag<ts.textChanges.ChangeTracker>()
 
@@ -41,7 +40,10 @@ export class NoTypeScriptProgramError {
 }
 
 export function getProgram() {
-  return T.serviceWithEffect(LanguageServiceApi, languageService => T.sync(() => languageService.getProgram()))
+  return Effect.serviceWithEffect(
+    LanguageServiceApi,
+    languageService => Effect.sync(() => languageService.getProgram())
+  )
     .filterOrFail((program): program is ts.Program => !!program, () => new NoTypeScriptProgramError())
 }
 
@@ -58,7 +60,7 @@ export function getSourceFile(fileName: string) {
 }
 
 export function hasModifier(node: ts.Declaration, kind: ts.ModifierFlags) {
-  return T.serviceWith(TypeScriptApi, ts => !!(ts.getCombinedModifierFlags(node) & kind))
+  return Effect.serviceWith(TypeScriptApi, ts => !!(ts.getCombinedModifierFlags(node) & kind))
 }
 
 function getChildNodesContainingRange(
@@ -105,7 +107,7 @@ export function getNodesContainingRange(
       })
     )
 
-    return CH.from(result.reverse)
+    return Chunk.from(result.reverse)
   })
 }
 
@@ -119,4 +121,23 @@ export function toTextRange(positionOrRange: number | ts.TextRange): ts.TextRang
 export function getHumanReadableName(sourceFile: ts.SourceFile, node: ts.Node) {
   const text = node.getText(sourceFile)
   return text.length > 10 ? text.substring(0, 10) + "..." : text
+}
+
+export function collectAll<R, E>(rootNode: ts.Node, test: (node: ts.Node) => Effect<R, E, boolean>) {
+  return Do(($) => {
+    const ts = $(Effect.service(TypeScriptApi))
+    const env = $(Effect.environment<R>())
+    let result = Chunk.empty<ts.Node>()
+
+    function visitor(node: ts.Node) {
+      if (test(node).provideEnvironment(env).unsafeRunSync()) result = result.append(node)
+      ts.visitEachChild(node, visitor, ts.nullTransformationContext)
+
+      return node
+    }
+
+    ts.visitNode(rootNode, visitor)
+
+    return result
+  })
 }

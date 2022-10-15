@@ -57,3 +57,21 @@ export function asPipeArguments(initialNode: ts.Node) {
 export function isPipeableCallExpression(node: ts.Node) {
   return asPipeableCallExpression(node).map(_ => _.isSome())
 }
+
+export function isCurryArrow(arrow: ts.Node) {
+  return Do($ => {
+    const ts = $(Effect.service(AST.TypeScriptApi))
+    if (!ts.isArrowFunction(arrow)) return false
+    if (arrow.parameters.length !== 1) return false
+    const parameter = arrow.parameters[0]!
+    const parameterName = parameter.name
+    if (!ts.isIdentifier(parameterName)) return false
+    const body = arrow.body
+    if (!ts.isCallExpression(body)) return false
+    const args = body.arguments
+    if (args.length !== 1) return false
+    const identifier = args[0]!
+    if (!ts.isIdentifier(identifier)) return false
+    return identifier.text === parameterName.text
+  })
+}
