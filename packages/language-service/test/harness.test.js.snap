@@ -8,6 +8,17 @@ const test = pipe(1, T.succeed, T.map(/* HERE */(a: number) => a * 2))
 "
 `;
 
+exports[`removeCurryArrow.ts > removeCurryArrow.ts 1`] = `
+"import * as T from \\"@effect/core/io/Effect\\"
+import { pipe } from \\"@tsplus/stdlib/data/Function\\"
+
+const test = pipe(
+  T.succeed(\\"Hello\\"),
+  T.tap(T.log)
+)
+"
+`;
+
 exports[`removePipe.ts > removePipe.ts 1`] = `
 "import * as T from \\"@effect/core/io/Effect\\"
 import { pipe } from \\"@tsplus/stdlib/data/Function\\"

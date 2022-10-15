@@ -115,3 +115,8 @@ export function getNodesContainingRange(
 export function toTextRange(positionOrRange: number | ts.TextRange): ts.TextRange {
   return typeof positionOrRange === "number" ? { end: positionOrRange, pos: positionOrRange } : positionOrRange
 }
+
+export function getHumanReadableName(sourceFile: ts.SourceFile, node: ts.Node) {
+  const text = node.getText(sourceFile)
+  return text.length > 10 ? text.substring(0, 10) + "..." : text
+}

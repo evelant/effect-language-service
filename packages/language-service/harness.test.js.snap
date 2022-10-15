@@ -1,9 +1,0 @@
-// Vitest Snapshot v1
-
-exports[`asyncAwaitToGen.ts > asyncAwaitToGen.ts 1`] = `
-"export function refactorMe(name: string) {
-    /* HERE */
-    return await Promise.resolve(1);
-}
-"
-`;
