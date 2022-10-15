@@ -1,3 +1,5 @@
-import asyncAwaitToGen from "@effect/language-service/refactors/asyncAwaitToGen"
+// import asyncAwaitToGen from "@effect/language-service/refactors/asyncAwaitToGen"
+import addPipe from "@effect/language-service/refactors/addPipe"
+import removePipe from "@effect/language-service/refactors/removePipe"
 
-export default [asyncAwaitToGen]
+export default { /*asyncAwaitToGen,*/ removePipe, addPipe }

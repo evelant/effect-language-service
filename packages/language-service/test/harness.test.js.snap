@@ -1,9 +1,19 @@
 // Vitest Snapshot v1
 
-exports[`asyncAwaitToGen.ts > asyncAwaitToGen.ts 1`] = `
-"export function refactorMe(name: string) {
-    /* HERE */
-    return await Promise.resolve(1);
-}
+exports[`addPipe.ts > addPipe.ts 1`] = `
+"import * as T from \\"@effect/core/io/Effect\\"
+import { pipe } from \\"@tsplus/stdlib/data/Function\\"
+
+const test = /* HERE */
+  pipe(1, T.succeed, /* HERE */ T.map((a: number) => a * 1))
+"
+`;
+
+exports[`removePipe.ts > removePipe.ts 1`] = `
+"import * as T from \\"@effect/core/io/Effect\\"
+import { pipe } from \\"@tsplus/stdlib/data/Function\\"
+
+const test = /* HERE */
+T.map(a => a * 1)(T.succeed(1))
 "
 `;

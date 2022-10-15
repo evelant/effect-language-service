@@ -1,6 +1,7 @@
 import * as T from "@effect/core/io/Effect"
 import * as CH from "@tsplus/stdlib/collections/Chunk"
 import { Tag } from "@tsplus/stdlib/service/Tag"
+import type ts from "typescript/lib/tsserverlibrary"
 
 declare module "typescript/lib/tsserverlibrary" {
   const nullTransformationContext: ts.TransformationContext
@@ -60,6 +61,28 @@ export function hasModifier(node: ts.Declaration, kind: ts.ModifierFlags) {
   return T.serviceWith(TypeScriptApi, ts => !!(ts.getCombinedModifierFlags(node) & kind))
 }
 
+function getChildNodesContainingRange(
+  parent: ts.Node,
+  textRange: ts.TextRange
+) {
+  return Do($ => {
+    const ts = $(Effect.service(TypeScriptApi))
+    let result: Chunk<ts.Node> = Chunk.empty()
+
+    ts.forEachChild(parent, node => {
+      if (node.end < textRange.pos) {
+        return
+      } else if (node.pos > textRange.end) {
+        return
+      } else {
+        result = result.append(node)
+      }
+    })
+
+    return result
+  })
+}
+
 /**
  * Gets the closest node that contains given TextRange
  */
@@ -68,28 +91,19 @@ export function getNodesContainingRange(
   textRange: ts.TextRange
 ) {
   return Do(($) => {
-    const ts = $(T.service(TypeScriptApi))
-    let result = CH.empty<ts.Node>()
-    let currentNode: ts.Node = sourceFile
-    let continueLoop = true
-    while (continueLoop) {
-      const node = currentNode
-      ts.forEachChild(node, testNode => {
-        if (testNode.end < textRange.pos) {
-          // node end is before the text range, find next node
-          return
-        }
-        if (testNode.pos > textRange.end) {
-          // node beginning is after range, we exit
-          continueLoop = false
-          return
-        }
-        // node is a candidate
-        result = result.append(testNode)
-        currentNode = testNode
+    let result: Chunk<ts.Node> = Chunk.empty()
+
+    $(
+      Effect.iterate([sourceFile] as ts.Node[], (_) => _.length > 0)(toProcess => {
+        const node = toProcess.shift()!
+        return getChildNodesContainingRange(node, textRange).flatMap(_ =>
+          Effect.sync(() => {
+            result = result.concat(_)
+            return toProcess.concat(..._.toArray)
+          })
+        )
       })
-      if (node === currentNode) return result
-    }
+    )
 
     return CH.from(result.reverse)
   })

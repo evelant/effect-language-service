@@ -1,16 +1,20 @@
 import * as AST from "@effect/language-service/ast"
-import asyncAwaitToGen from "@effect/language-service/refactors/asyncAwaitToGen"
 import type { RefactorDefinition } from "@effect/language-service/refactors/definition"
+import refactors from "@effect/language-service/refactors/index"
 import * as O from "@tsplus/stdlib/data/Maybe"
 import * as fs from "fs"
 import ts from "typescript/lib/tsserverlibrary"
 
-function createVirtualFile(fileName: string, sourceText: string) {
-  const files = { [fileName]: sourceText }
-
-  const languageServiceHost: ts.LanguageServiceHost = {
+function createMockLanguageServiceHost(fileName: string, sourceText: string): ts.LanguageServiceHost {
+  return {
     getCompilationSettings() {
-      return { ...ts.getDefaultCompilerOptions(), strict: true, target: ts.ScriptTarget.ESNext, noEmit: true }
+      return {
+        ...ts.getDefaultCompilerOptions(),
+        strict: true,
+        target: ts.ScriptTarget.ESNext,
+        noEmit: true,
+        moduleResolution: ts.ModuleResolutionKind.NodeJs
+      }
     },
     getScriptFileNames() {
       return [fileName]
@@ -18,76 +22,60 @@ function createVirtualFile(fileName: string, sourceText: string) {
     getScriptVersion(_fileName) {
       return ""
     },
-    getScriptSnapshot(fileName) {
-      if (fileName in files) {
-        return ts.ScriptSnapshot.fromString(files[fileName] || "")
+    getScriptSnapshot(_fileName) {
+      if (_fileName === fileName) {
+        return ts.ScriptSnapshot.fromString(sourceText)
       }
-      return ts.ScriptSnapshot.fromString(fs.readFileSync(fileName).toString())
+      return ts.ScriptSnapshot.fromString(fs.readFileSync(_fileName).toString())
     },
     getCurrentDirectory: () => ".",
     getDefaultLibFileName(options) {
       return ts.getDefaultLibFilePath(options)
     },
-    fileExists: (fileName) => {
-      if (fileName.endsWith(".d.ts")) {
-        return fs.existsSync(fileName)
-      }
-      return !!files[fileName]
+    fileExists: (_fileName) => {
+      if (_fileName === fileName) return true
+      return fs.existsSync(_fileName)
     },
-    readFile: (fileName) => {
-      if (fileName in files) return files[fileName]
-      return fs.readFileSync(fileName).toString()
+    readFile: (_fileName) => {
+      if (_fileName === fileName) return sourceText
+      return fs.readFileSync(_fileName).toString()
     }
   }
+}
 
-  const languageService = ts.createLanguageService(
-    languageServiceHost,
-    undefined,
-    ts.LanguageServiceMode.Semantic
-  )
+/**
+ * Loop through text changes, and update start and end positions while running
+ */
+function forEachTextChange(
+  changes: readonly ts.TextChange[],
+  cb: (change: ts.TextChange) => void
+): void {
+  changes = JSON.parse(JSON.stringify(changes))
+  for (let i = 0; i < changes.length; i++) {
+    const change = changes[i]!
+    cb(change)
+    const changeDelta = change.newText.length - change.span.length
+    for (let j = i + 1; j < changes.length; j++) {
+      if (changes[j]!.span.start >= change.span.start) {
+        changes[j]!.span.start += changeDelta
+      }
+    }
+  }
+}
 
-  const sourceFile_ = languageService.getProgram()?.getSourceFile(fileName)
-  const sourceFile = sourceFile_!
-
-  function applyFileTextChanges(edits: readonly ts.FileTextChanges[]): string {
-    const newFiles: Record<string, string> = JSON.parse(JSON.stringify(files))
-    for (const fileTextChange of edits) {
+function applyEdits(edits: readonly ts.FileTextChanges[], fileName: string, sourceText: string): string {
+  for (const fileTextChange of edits) {
+    if (fileTextChange.fileName === fileName) {
       forEachTextChange(fileTextChange.textChanges, (edit) => {
-        const content = files[fileTextChange.fileName] || ""
+        const content = sourceText
         const prefix = content.substring(0, edit.span.start)
         const middle = edit.newText
         const suffix = content.substring(edit.span.start + edit.span.length)
-        newFiles[fileTextChange.fileName] = prefix + middle + suffix
+        sourceText = prefix + middle + suffix
       })
     }
-    return newFiles[fileName] || ""
   }
-
-  /** Apply each textChange in order, updating future changes to account for the text offset of previous changes. */
-  function forEachTextChange(
-    changes: readonly ts.TextChange[],
-    cb: (change: ts.TextChange) => void
-  ): void {
-    // Copy this so we don't ruin someone else's copy
-    changes = JSON.parse(JSON.stringify(changes))
-    for (let i = 0; i < changes.length; i++) {
-      const change = changes[i]!
-      cb(change)
-      const changeDelta = change.newText.length - change.span.length
-      for (let j = i + 1; j < changes.length; j++) {
-        if (changes[j]!.span.start >= change.span.start) {
-          changes[j]!.span.start += changeDelta
-        }
-      }
-    }
-  }
-
-  return {
-    languageServiceHost,
-    languageService,
-    applyFileTextChanges,
-    sourceFile
-  }
+  return sourceText
 }
 
 export function testRefactorOnExample(refactor: RefactorDefinition, fileName: string) {
@@ -95,13 +83,28 @@ export function testRefactorOnExample(refactor: RefactorDefinition, fileName: st
     .toString("utf8")
   const cursorPosition = sourceWithMarker.indexOf("/* HERE */")
   const textRange = { pos: cursorPosition, end: cursorPosition + 1 }
-  const {
-    applyFileTextChanges,
-    languageService,
-    languageServiceHost,
-    sourceFile
-  } = createVirtualFile(fileName, sourceWithMarker)
 
+  // create the language service
+  const languageServiceHost = createMockLanguageServiceHost(fileName, sourceWithMarker)
+  const languageService = ts.createLanguageService(languageServiceHost, undefined, ts.LanguageServiceMode.Semantic)
+  const sourceFile = languageService.getProgram()?.getSourceFile(fileName)
+  if (!sourceFile) throw new Error("No source file " + fileName + " in VFS")
+
+  // ensure there are no errors in TS file
+  const diagnostics = languageService.getCompilerOptionsDiagnostics()
+    .concat(languageService.getSyntacticDiagnostics(fileName))
+    .concat(languageService.getSemanticDiagnostics(fileName)).map(diagnostic => {
+      const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")
+      if (diagnostic.file) {
+        const { character, line } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start!)
+        return `  Error ${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`
+      } else {
+        return `  Error: ${message}`
+      }
+    })
+  expect(diagnostics).toEqual([])
+
+  // check and assert the refactor is executable
   const canApply = refactor
     .apply(sourceFile, textRange)
     .provideService(AST.TypeScriptApi, ts)
@@ -111,6 +114,7 @@ export function testRefactorOnExample(refactor: RefactorDefinition, fileName: st
   expect(O.isSome(canApply)).toBe(true)
   if (O.isNone(canApply)) return
 
+  // run the refactor and ensure it matches the snapshot
   const formatContext = ts.formatting.getFormatContext(
     ts.getDefaultFormatCodeSettings("\n"),
     { getNewLine: () => "\n" }
@@ -124,10 +128,12 @@ export function testRefactorOnExample(refactor: RefactorDefinition, fileName: st
     (changeTracker) =>
       canApply.value
         .provideService(AST.ChangeTrackerApi, changeTracker)
+        .provideService(AST.TypeScriptApi, ts)
+        .provideService(AST.LanguageServiceApi, languageService)
         .unsafeRunSync()
   )
 
-  expect(applyFileTextChanges(edits)).toMatchSnapshot()
+  expect(applyEdits(edits, fileName, sourceWithMarker)).toMatchSnapshot()
 }
 
 function testRefactor(name: string, refactor: RefactorDefinition, fileNames: string[]) {
@@ -140,4 +146,4 @@ function testRefactor(name: string, refactor: RefactorDefinition, fileNames: str
   }
 }
 
-testRefactor("asyncAwaitToGen", asyncAwaitToGen, ["asyncAwaitToGen.ts"])
+Object.keys(refactors).map(refactorName => testRefactor(refactorName, refactors[refactorName]!, [refactorName + ".ts"]))

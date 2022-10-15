@@ -25,7 +25,7 @@ export default function init(modules: { typescript: typeof import("typescript/li
 
       const effectRefactors = AST.getSourceFile(fileName).flatMap(sourceFile =>
         T.collectAllWith(
-          refactors.map(refactor =>
+          Object.values(refactors).map(refactor =>
             refactor.apply(sourceFile, textRange).map(canApply =>
               canApply.map(_ => ({
                 name: refactor.name,
@@ -60,7 +60,7 @@ export default function init(modules: { typescript: typeof import("typescript/li
       preferences,
       ...args
     ) => {
-      for (const refactor of refactors) {
+      for (const refactor of Object.values(refactors)) {
         if (refactor.name === refactorName) {
           return Do($ => {
             const sourceFile = $(AST.getSourceFile(fileName))
@@ -82,7 +82,11 @@ export default function init(modules: { typescript: typeof import("typescript/li
                 preferences: preferences || {}
               },
               changeTracker =>
-                possibleRefactor.value.provideService(AST.ChangeTrackerApi, changeTracker).unsafeRunSync()
+                possibleRefactor.value.provideService(AST.ChangeTrackerApi, changeTracker).provideService(
+                  AST.TypeScriptApi,
+                  modules.typescript
+                )
+                  .provideService(AST.LanguageServiceApi, info.languageService).unsafeRunSync()
             )
 
             return { edits }
