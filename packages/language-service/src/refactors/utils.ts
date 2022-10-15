@@ -14,9 +14,17 @@ export function isPipeCall(node: ts.Node) {
 export function asPipeableCallExpression(node: ts.Node) {
   return Do($ => {
     const ts = $(Effect.service(AST.TypeScriptApi))
+    // ensure the node is a call expression
     if (!ts.isCallExpression(node)) return Maybe.none
+    // with just 1 arg
     if (node.arguments.length !== 1) return Maybe.none
-    return Maybe.some([node.expression, node.arguments[0]!] as const)
+    const arg = node.arguments[0]!
+    // ideally T.map(n => n * 2) could be piped to pipe(n => n * 2, T.map)
+    // but does not make any sense.
+    if (ts.isArrowFunction(arg)) return Maybe.none
+    // same goes for identifiers, string literal or numbers
+    if (ts.isStringLiteral(arg) || ts.isNumericLiteral(arg) || ts.isIdentifier(arg)) return Maybe.none
+    return Maybe.some([node.expression, arg] as const)
   })
 }
 
