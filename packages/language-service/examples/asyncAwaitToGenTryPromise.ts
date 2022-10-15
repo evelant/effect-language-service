@@ -2,5 +2,8 @@ import * as Effect from "@effect/core/io/Effect"
 
 export async function refactorMe(arg: string) {
   /* HERE */
-  return await Promise.resolve(1)
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve(i)
+  }
+  return await Promise.resolve(arg)
 }

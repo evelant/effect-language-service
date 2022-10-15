@@ -8,6 +8,30 @@ const test = pipe(T.succeed(1), T.map(/* HERE */(a: number) => a * 2))
 "
 `;
 
+exports[`asyncAwaitToGen.ts > asyncAwaitToGen.ts 1`] = `
+"import * as Effect from \\"@effect/core/io/Effect\\"
+
+export function refactorMe(arg: string) {
+    return Effect.gen(function*($) {
+        /* HERE */
+        return yield* $(Effect.promise(Promise.resolve(1)))
+    })
+}
+"
+`;
+
+exports[`asyncAwaitToGenTryPromise.ts > asyncAwaitToGenTryPromise.ts 1`] = `
+"import * as Effect from \\"@effect/core/io/Effect\\"
+
+export function refactorMe(arg: string) {
+    return Effect.gen(function*($) {
+        /* HERE */
+        return yield* $(Effect.tryCatchPromise(Promise.resolve(1)))
+    })
+}
+"
+`;
+
 exports[`removeCurryArrow.ts > removeCurryArrow.ts 1`] = `
 "import * as T from \\"@effect/core/io/Effect\\"
 import { pipe } from \\"@tsplus/stdlib/data/Function\\"

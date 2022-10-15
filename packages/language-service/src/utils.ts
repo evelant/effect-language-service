@@ -1,4 +1,5 @@
 import * as AST from "@effect/language-service/ast"
+import type ts from "typescript/lib/tsserverlibrary"
 
 export function isPipeCall(node: ts.Node) {
   return Do($ => {
@@ -73,5 +74,86 @@ export function isCurryArrow(arrow: ts.Node) {
     const identifier = args[0]!
     if (!ts.isIdentifier(identifier)) return false
     return identifier.text === parameterName.text
+  })
+}
+
+export function transformAsyncAwaitToEffectGen(
+  node: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression,
+  onAwait: (expression: ts.Expression) => ts.Expression
+) {
+  return Do($ => {
+    const ts = $(Effect.service(AST.TypeScriptApi))
+
+    function visitor(_: ts.Node): ts.Node {
+      if (ts.isAwaitExpression(_)) {
+        const expression = ts.visitEachChild(_.expression, visitor, ts.nullTransformationContext)
+
+        return ts.factory.createYieldExpression(
+          ts.factory.createToken(ts.SyntaxKind.AsteriskToken),
+          ts.factory.createCallExpression(ts.factory.createIdentifier("$"), undefined, [onAwait(expression)])
+        )
+      }
+      return ts.visitEachChild(_, visitor, ts.nullTransformationContext)
+    }
+    const generatorBody = visitor(node.body!)
+
+    const generator = ts.factory.createFunctionExpression(
+      [],
+      ts.factory.createToken(ts.SyntaxKind.AsteriskToken),
+      undefined,
+      [],
+      [ts.factory.createParameterDeclaration(undefined, undefined, "$")],
+      undefined,
+      generatorBody as any // NOTE(mattia): intended, to use same routine for both ConciseBody and Body
+    )
+
+    const effectGenCallExp = ts.factory.createCallExpression(
+      ts.factory.createPropertyAccessExpression(
+        ts.factory.createIdentifier("Effect"),
+        "gen"
+      ),
+      undefined,
+      [generator as any]
+    )
+
+    let currentFlags = ts.getCombinedModifierFlags(node)
+    currentFlags &= ~ts.ModifierFlags.Async
+    const newModifiers = ts.factory.createModifiersFromModifierFlags(currentFlags)
+
+    if (ts.isArrowFunction(node)) {
+      return ts.factory.createArrowFunction(
+        newModifiers,
+        node.typeParameters,
+        node.parameters,
+        undefined,
+        node.equalsGreaterThanToken,
+        effectGenCallExp
+      )
+    }
+
+    const newBody = ts.factory.createBlock([
+      ts.factory.createReturnStatement(effectGenCallExp)
+    ])
+
+    if (ts.isFunctionDeclaration(node)) {
+      return ts.factory.createFunctionDeclaration(
+        newModifiers,
+        node.asteriskToken,
+        node.name,
+        node.typeParameters,
+        node.parameters,
+        undefined,
+        newBody
+      )
+    }
+    return ts.factory.createFunctionExpression(
+      newModifiers,
+      node.asteriskToken,
+      node.name,
+      node.typeParameters,
+      node.parameters,
+      undefined,
+      newBody
+    )
   })
 }

@@ -1,6 +1,7 @@
 import * as T from "@effect/core/io/Effect"
 import * as AST from "@effect/language-service/ast"
 import { createRefactor } from "@effect/language-service/refactors/definition"
+import { transformAsyncAwaitToEffectGen } from "@effect/language-service/utils"
 
 export default createRefactor({
   name: "effect/asyncAwaitToGen",
@@ -14,25 +15,19 @@ export default createRefactor({
       return nodes.filter(ts.isFunctionDeclaration).filter(node => !!node.body).filter(node =>
         !!(ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Async)
       ).head.map(node => ({
-        description: "Convert to Effect.gen",
+        description: "Rewrite to Effect.gen",
         apply: Do($ => {
           const changeTracker = $(T.service(AST.ChangeTrackerApi))
 
-          let currentFlags = ts.getCombinedModifierFlags(node)
-          currentFlags &= ~ts.ModifierFlags.Async
-          const newDeclaration = ts.factory.createFunctionDeclaration(
-            ts.factory.createModifiersFromModifierFlags(currentFlags),
-            node.asteriskToken,
-            node.name,
-            node.typeParameters,
-            node.parameters,
-            node.type,
-            ts.factory.createBlock([
-              ts.factory.createReturnStatement(
-                ts.factory.createIdentifier("undef")
-              )
-            ])
-          )
+          const newDeclaration = $(transformAsyncAwaitToEffectGen(node, expression =>
+            ts.factory.createCallExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createIdentifier("Effect"),
+                "promise"
+              ),
+              undefined,
+              [expression]
+            )))
 
           changeTracker.replaceNode(sourceFile, node, newDeclaration)
         })
