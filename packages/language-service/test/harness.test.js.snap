@@ -37,7 +37,7 @@ export function refactorMe(arg: string) {
 `;
 
 exports[`functionToArrow.ts > functionToArrow.ts 1`] = `
-"// 5:20,12:20
+"// 5:20,12:20,21:5
 /**
  * Docs
  */
@@ -50,11 +50,20 @@ export function myTest2(name: string) {
   if (name === \\"LOL\\") return 42
   return name.length
 }
+
+class Sample {
+  /**
+   * Docs
+   */
+  test(name: string) {
+    return name.length
+  }
+}
 "
 `;
 
 exports[`functionToArrow.ts > functionToArrow.ts 2`] = `
-"// 5:20,12:20
+"// 5:20,12:20,21:5
 /**
  * Docs
  */
@@ -69,6 +78,44 @@ export const myTest2 = (name: string) => {
     if (name === \\"LOL\\")
         return 42
     return name.length
+}
+
+class Sample {
+  /**
+   * Docs
+   */
+  test(name: string) {
+    return name.length
+  }
+}
+"
+`;
+
+exports[`functionToArrow.ts > functionToArrow.ts 3`] = `
+"// 5:20,12:20,21:5
+/**
+ * Docs
+ */
+export function myTest(name: string) {
+  return name.length
+}
+
+/**
+ * Docs
+ */
+export function myTest2(name: string) {
+  if (name === \\"LOL\\") return 42
+  return name.length
+}
+
+class Sample {
+  /**
+   * Docs
+   */
+  /**
+     * Docs
+     */
+    test = (name: string) => name.length
 }
 "
 `;

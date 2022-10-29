@@ -11,9 +11,9 @@ export default createRefactor({
 
       const nodes = $(AST.getNodesContainingRange(sourceFile, textRange))
 
-      return nodes.filter(ts.isFunctionDeclaration).filter(node => !!node.body).filter(node =>
-        !!node.name && node.name.pos <= textRange.pos && node.name.end >= textRange.end
-      ).head.map(
+      return nodes.filter(ts.isFunctionDeclaration).concat(nodes.filter(ts.isMethodDeclaration)).filter(node =>
+        !!node.body
+      ).filter(node => !!node.name && node.name.pos <= textRange.pos && node.name.end >= textRange.end).head.map(
         node => ({
           description: "Convert to arrow",
           apply: Do($ => {
@@ -46,16 +46,26 @@ export default createRefactor({
             constFlags &= ~arrowFlags
             const constModifiers = ts.factory.createModifiersFromModifierFlags(constFlags)
 
-            const newDeclaration = ts.factory.createVariableStatement(
-              constModifiers,
-              ts.factory.createVariableDeclarationList(
-                [
-                  ts.factory.createVariableDeclaration(node.name!, undefined, undefined, arrowFunction)
-                ],
-                ts.NodeFlags.Const
+            let newDeclaration: ts.Node = node
+            if (ts.isMethodDeclaration(node)) {
+              newDeclaration = ts.factory.createPropertyDeclaration(
+                constModifiers,
+                node.name!,
+                undefined,
+                undefined,
+                arrowFunction
               )
-            )
-
+            } else if (ts.isFunctionDeclaration(node)) {
+              newDeclaration = ts.factory.createVariableStatement(
+                constModifiers,
+                ts.factory.createVariableDeclarationList(
+                  [
+                    ts.factory.createVariableDeclaration(node.name!, undefined, undefined, arrowFunction)
+                  ],
+                  ts.NodeFlags.Const
+                )
+              )
+            }
             changeTracker.replaceNode(sourceFile, node, newDeclaration)
           })
         })
