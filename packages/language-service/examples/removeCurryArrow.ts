@@ -1,7 +1,8 @@
+// 7:12
 import * as T from "@effect/core/io/Effect"
 import { pipe } from "@tsplus/stdlib/data/Function"
 
 const test = pipe(
   T.succeed("Hello"),
-  T.tap((_) => /* HERE */ T.log(_))
+  T.tap((_) => T.log(_))
 )

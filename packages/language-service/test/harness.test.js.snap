@@ -1,19 +1,20 @@
 // Vitest Snapshot v1
 
 exports[`addPipe.ts > addPipe.ts 1`] = `
-"import * as T from \\"@effect/core/io/Effect\\"
+"// 5:18
+import * as T from \\"@effect/core/io/Effect\\"
 import { pipe } from \\"@tsplus/stdlib/data/Function\\"
 
-const test = pipe(T.succeed(1), T.map(/* HERE */(a: number) => a * 2))
+const test = pipe(T.succeed(1), T.map((a: number) => a * 2))
 "
 `;
 
 exports[`asyncAwaitToGen.ts > asyncAwaitToGen.ts 1`] = `
-"import * as Effect from \\"@effect/core/io/Effect\\"
+"// 4:28
+import * as Effect from \\"@effect/core/io/Effect\\"
 
 export function refactorMe(arg: string) {
     return Effect.gen(function*($) {
-        /* HERE */
         return yield* $(Effect.promise(Promise.resolve(1)))
     })
 }
@@ -21,19 +22,60 @@ export function refactorMe(arg: string) {
 `;
 
 exports[`asyncAwaitToGenTryPromise.ts > asyncAwaitToGenTryPromise.ts 1`] = `
-"import * as Effect from \\"@effect/core/io/Effect\\"
+"// 4:28
+import * as Effect from \\"@effect/core/io/Effect\\"
 
 export function refactorMe(arg: string) {
     return Effect.gen(function*($) {
-        /* HERE */
-        return yield* $(Effect.tryCatchPromise(Promise.resolve(1)))
+        for (let i = 0; i < 10; i++) {
+            yield* $(Effect.tryCatchPromise(() => Promise.resolve(i), error => ({ _tag: \\"Error1\\" as const, error })))
+        }
+        return yield* $(Effect.tryCatchPromise(() => Promise.resolve(arg), error => ({ _tag: \\"Error2\\" as const, error })))
     })
 }
 "
 `;
 
+exports[`functionToArrow.ts > functionToArrow.ts 1`] = `
+"// 5:20,12:20
+/**
+ * Docs
+ */
+export const myTest = (name: string) => name.length
+
+/**
+ * Docs
+ */
+export function myTest2(name: string) {
+  if (name === \\"LOL\\") return 42
+  return name.length
+}
+"
+`;
+
+exports[`functionToArrow.ts > functionToArrow.ts 2`] = `
+"// 5:20,12:20
+/**
+ * Docs
+ */
+export function myTest(name: string) {
+  return name.length
+}
+
+/**
+ * Docs
+ */
+export const myTest2 = (name: string) => {
+    if (name === \\"LOL\\")
+        return 42
+    return name.length
+}
+"
+`;
+
 exports[`removeCurryArrow.ts > removeCurryArrow.ts 1`] = `
-"import * as T from \\"@effect/core/io/Effect\\"
+"// 7:12
+import * as T from \\"@effect/core/io/Effect\\"
 import { pipe } from \\"@tsplus/stdlib/data/Function\\"
 
 const test = pipe(
@@ -44,10 +86,10 @@ const test = pipe(
 `;
 
 exports[`removePipe.ts > removePipe.ts 1`] = `
-"import * as T from \\"@effect/core/io/Effect\\"
+"// 5:16
+import * as T from \\"@effect/core/io/Effect\\"
 import { pipe } from \\"@tsplus/stdlib/data/Function\\"
 
-const test = /* HERE */
-T.map(a => a * 1)(T.succeed(1))
+const test = T.map(a => a * 1)(T.succeed(1))
 "
 `;

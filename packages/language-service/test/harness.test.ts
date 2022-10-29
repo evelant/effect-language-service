@@ -81,59 +81,64 @@ function applyEdits(edits: readonly ts.FileTextChanges[], fileName: string, sour
 export function testRefactorOnExample(refactor: RefactorDefinition, fileName: string) {
   const sourceWithMarker = fs.readFileSync(require.resolve(__dirname + "/../../examples/" + fileName))
     .toString("utf8")
-  const cursorPosition = sourceWithMarker.indexOf("/* HERE */")
-  const textRange = { pos: cursorPosition, end: cursorPosition + 1 }
+  const firstLine = (sourceWithMarker.split("\n")[0] || "").trim()
+  for (const [lineAndCol] of firstLine.matchAll(/([0-9]+:[0-9]+)/gm)) {
+    // create the language service
+    const languageServiceHost = createMockLanguageServiceHost(fileName, sourceWithMarker)
+    const languageService = ts.createLanguageService(languageServiceHost, undefined, ts.LanguageServiceMode.Semantic)
+    const sourceFile = languageService.getProgram()?.getSourceFile(fileName)
+    if (!sourceFile) throw new Error("No source file " + fileName + " in VFS")
 
-  // create the language service
-  const languageServiceHost = createMockLanguageServiceHost(fileName, sourceWithMarker)
-  const languageService = ts.createLanguageService(languageServiceHost, undefined, ts.LanguageServiceMode.Semantic)
-  const sourceFile = languageService.getProgram()?.getSourceFile(fileName)
-  if (!sourceFile) throw new Error("No source file " + fileName + " in VFS")
+    // gets the position to test
+    const [line, character] = lineAndCol.split(":")
+    const cursorPosition = ts.getPositionOfLineAndCharacter(sourceFile, +line! - 1, +character!)
+    const textRange = { pos: cursorPosition, end: cursorPosition + 1 }
 
-  // ensure there are no errors in TS file
-  const diagnostics = languageService.getCompilerOptionsDiagnostics()
-    .concat(languageService.getSyntacticDiagnostics(fileName))
-    .concat(languageService.getSemanticDiagnostics(fileName)).map(diagnostic => {
-      const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")
-      if (diagnostic.file) {
-        const { character, line } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start!)
-        return `  Error ${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`
-      } else {
-        return `  Error: ${message}`
-      }
-    })
-  expect(diagnostics).toEqual([])
+    // ensure there are no errors in TS file
+    const diagnostics = languageService.getCompilerOptionsDiagnostics()
+      .concat(languageService.getSyntacticDiagnostics(fileName))
+      .concat(languageService.getSemanticDiagnostics(fileName)).map(diagnostic => {
+        const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")
+        if (diagnostic.file) {
+          const { character, line } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start!)
+          return `  Error ${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`
+        } else {
+          return `  Error: ${message}`
+        }
+      })
+    expect(diagnostics).toEqual([])
 
-  // check and assert the refactor is executable
-  const canApply = refactor
-    .apply(sourceFile, textRange)
-    .provideService(AST.TypeScriptApi, ts)
-    .provideService(AST.LanguageServiceApi, languageService)
-    .unsafeRunSync()
+    // check and assert the refactor is executable
+    const canApply = refactor
+      .apply(sourceFile, textRange)
+      .provideService(AST.TypeScriptApi, ts)
+      .provideService(AST.LanguageServiceApi, languageService)
+      .unsafeRunSync()
 
-  expect(O.isSome(canApply)).toBe(true)
-  if (O.isNone(canApply)) return
+    expect(O.isSome(canApply)).toBe(true)
+    if (O.isNone(canApply)) return
 
-  // run the refactor and ensure it matches the snapshot
-  const formatContext = ts.formatting.getFormatContext(
-    ts.getDefaultFormatCodeSettings("\n"),
-    { getNewLine: () => "\n" }
-  )
-  const edits = ts.textChanges.ChangeTracker.with(
-    {
-      formatContext,
-      host: languageServiceHost,
-      preferences: {}
-    },
-    (changeTracker) =>
-      canApply.value.apply
-        .provideService(AST.ChangeTrackerApi, changeTracker)
-        .provideService(AST.TypeScriptApi, ts)
-        .provideService(AST.LanguageServiceApi, languageService)
-        .unsafeRunSync()
-  )
+    // run the refactor and ensure it matches the snapshot
+    const formatContext = ts.formatting.getFormatContext(
+      ts.getDefaultFormatCodeSettings("\n"),
+      { getNewLine: () => "\n" }
+    )
+    const edits = ts.textChanges.ChangeTracker.with(
+      {
+        formatContext,
+        host: languageServiceHost,
+        preferences: {}
+      },
+      (changeTracker) =>
+        canApply.value.apply
+          .provideService(AST.ChangeTrackerApi, changeTracker)
+          .provideService(AST.TypeScriptApi, ts)
+          .provideService(AST.LanguageServiceApi, languageService)
+          .unsafeRunSync()
+    )
 
-  expect(applyEdits(edits, fileName, sourceWithMarker)).toMatchSnapshot()
+    expect(applyEdits(edits, fileName, sourceWithMarker)).toMatchSnapshot()
+  }
 }
 
 function testRefactor(name: string, refactor: RefactorDefinition, fileNames: string[]) {

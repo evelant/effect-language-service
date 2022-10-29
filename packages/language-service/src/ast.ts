@@ -27,6 +27,22 @@ declare module "typescript/lib/tsserverlibrary" {
     }
     export function applyChanges(text: string, changes: readonly ts.TextChange[]): string
   }
+
+  export function findPrecedingToken(
+    position: number,
+    sourceFile: ts.SourceFileLike,
+    startNode: ts.Node,
+    excludeJsdoc?: boolean
+  ): ts.Node | undefined
+  export function findPrecedingToken(
+    position: number,
+    sourceFile: ts.SourceFile,
+    startNode?: ts.Node,
+    excludeJsdoc?: boolean
+  ): ts.Node | undefined
+
+  export function isMemberName(node: ts.Node): node is ts.MemberName
+  export function isKeyword(token: ts.SyntaxKind): token is ts.KeywordSyntaxKind
 }
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -139,5 +155,23 @@ export function collectAll<R, E>(rootNode: ts.Node, test: (node: ts.Node) => Eff
     ts.visitNode(rootNode, visitor)
 
     return result
+  })
+}
+
+export function getRelevantTokens(
+  position: number,
+  sourceFile: ts.SourceFile
+) {
+  return Do(($) => {
+    const ts = $(Effect.service(TypeScriptApi))
+    const previousToken = ts.findPrecedingToken(position, sourceFile)
+    if (
+      previousToken && position <= previousToken.end &&
+      (ts.isMemberName(previousToken) || ts.isKeyword(previousToken.kind))
+    ) {
+      const contextToken = ts.findPrecedingToken(previousToken.getFullStart(), sourceFile, /*startNode*/ undefined)! // TODO: GH#18217
+      return { contextToken, previousToken }
+    }
+    return { contextToken: Maybe.fromNullable(previousToken), previousToken: Maybe.fromNullable(previousToken) }
   })
 }
